@@ -2,6 +2,7 @@ package com.imob.syncpaste;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.StrictMode;
 import android.util.Log;
 import android.view.View;
 
@@ -38,6 +39,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
         findViewById(R.id.stop_server).setOnClickListener(this);
         findViewById(R.id.connect_to_server).setOnClickListener(this);
         findViewById(R.id.check_client).setOnClickListener(this);
+
+        StrictMode.setThreadPolicy(new StrictMode.ThreadPolicy.Builder()
+                .detectAll()
+                .penaltyLog()
+                .build());
     }
 
     @Override
@@ -68,6 +74,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                 OutputStream outputStream = socket.getOutputStream();
                 if (outputStream != null) {
                     outputStream.write(new byte[]{1, 2, 3});
+                    outputStream.flush();
                 }
                 Log.i(TAG, "checkClientSocketConnections: " + outputStream);
             } catch (IOException e) {
@@ -94,7 +101,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
     }
 
     private void stopServer() {
-        ServerSocketManager.getInstance().destroy();
+        ServerSocketManager.getInstance().stop();
         serverSocket = null;
     }
 

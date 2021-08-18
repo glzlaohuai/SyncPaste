@@ -11,6 +11,8 @@ import java.util.concurrent.Executors;
 
 public class ServerSocketManager {
 
+    private static final String TAG = "ServerSocketManager";
+
     private static ServerSocketManager instance = new ServerSocketManager();
 
     public static ServerSocketManager getInstance() {
@@ -30,7 +32,6 @@ public class ServerSocketManager {
 
         void onStopped();
     }
-
 
     private boolean created = false;
     private ServerSocket serverSocket;
@@ -94,10 +95,22 @@ public class ServerSocketManager {
         }
     }
 
-    public void destroy() {
+    private void closeSocket(Socket socket) {
+        if (socket != null) {
+            try {
+                socket.close();
+            } catch (IOException e) {
+            }
+        }
+    }
+
+    public void stop() {
         if (isServerSocketAvailable()) {
             closeServerSocketIfNeeded();
             executorService.shutdown();
+            for (Socket socket : connectedSocketList) {
+                closeSocket(socket);
+            }
             connectedSocketList.clear();
             listener.onStopped();
         }
