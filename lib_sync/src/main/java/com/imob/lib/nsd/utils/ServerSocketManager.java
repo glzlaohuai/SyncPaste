@@ -3,10 +3,11 @@ package com.imob.lib.nsd.utils;
 import java.io.IOException;
 import java.net.ServerSocket;
 import java.net.Socket;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-import androidx.annotation.NonNull;
 
 public class ServerSocketManager {
 
@@ -26,6 +27,8 @@ public class ServerSocketManager {
         void onStartMonitor();
 
         void onIncomingSocket(Socket socket);
+
+        void onStopped();
     }
 
 
@@ -33,6 +36,8 @@ public class ServerSocketManager {
     private ServerSocket serverSocket;
     private OnServerSocketListener listener;
     private ExecutorService executorService = Executors.newSingleThreadExecutor();
+
+    private List<Socket> connectedSocketList = new ArrayList<>();
 
     private void closeServerSocketIfNeeded() {
         created = false;
@@ -45,13 +50,14 @@ public class ServerSocketManager {
         }
     }
 
-    public void create(@NonNull OnServerSocketListener listener) {
+    public void create(OnServerSocketListener listener) {
         if (!(created && serverSocket != null && serverSocket.isBound() && !serverSocket.isClosed())) {
             closeServerSocketIfNeeded();
             this.listener = listener;
             try {
                 ServerSocket serverSocket = new ServerSocket(0);
                 created = true;
+                ServerSocketManager.this.serverSocket = serverSocket;
                 if (serverSocket != null) {
                     listener.onCreated(serverSocket);
                 } else {
@@ -77,6 +83,7 @@ public class ServerSocketManager {
                     while (true && isServerSocketAvailable()) {
                         try {
                             Socket socket = serverSocket.accept();
+                            connectedSocketList.add(socket);
                             listener.onIncomingSocket(socket);
                         } catch (IOException e) {
                             e.printStackTrace();
@@ -91,6 +98,8 @@ public class ServerSocketManager {
         if (isServerSocketAvailable()) {
             closeServerSocketIfNeeded();
             executorService.shutdown();
+            connectedSocketList.clear();
+            listener.onStopped();
         }
     }
 
