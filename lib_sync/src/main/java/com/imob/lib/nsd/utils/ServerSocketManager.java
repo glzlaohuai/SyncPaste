@@ -40,6 +40,8 @@ public class ServerSocketManager {
 
     private List<Socket> connectedSocketList = new ArrayList<>();
 
+    private boolean isMonitoring = false;
+
     private void closeServerSocketIfNeeded() {
         created = false;
         if (serverSocket != null) {
@@ -51,7 +53,7 @@ public class ServerSocketManager {
         }
     }
 
-    public void create(OnServerSocketListener listener) {
+    public void create(OnServerSocketListener listener) throws IllegalStateException {
         if (!(created && serverSocket != null && serverSocket.isBound() && !serverSocket.isClosed())) {
             closeServerSocketIfNeeded();
             this.listener = listener;
@@ -67,6 +69,8 @@ public class ServerSocketManager {
             } catch (IOException e) {
                 listener.onErrorOccurred(e);
             }
+        } else {
+            throw new IllegalStateException("already has a working server now, no need to create.");
         }
     }
 
@@ -75,23 +79,29 @@ public class ServerSocketManager {
     }
 
 
-    public void startMonitorConnectedSockets() {
-        if (isServerSocketAvailable()) {
-            listener.onStartMonitor();
-            executorService.execute(new Runnable() {
-                @Override
-                public void run() {
-                    while (true && isServerSocketAvailable()) {
-                        try {
-                            Socket socket = serverSocket.accept();
-                            connectedSocketList.add(socket);
-                            listener.onIncomingSocket(socket);
-                        } catch (IOException e) {
-                            e.printStackTrace();
+    public void startMonitorConnectedSockets() throws IllegalStateException {
+        if (!isMonitoring) {
+            if (isServerSocketAvailable()) {
+                listener.onStartMonitor();
+                isMonitoring = true;
+                executorService.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        while (true && isServerSocketAvailable()) {
+                            try {
+                                Socket socket = serverSocket.accept();
+                                connectedSocketList.add(socket);
+                                listener.onIncomingSocket(socket);
+                            } catch (IOException e) {
+                                e.printStackTrace();
+                                isMonitoring = false;
+                            }
                         }
                     }
-                }
-            });
+                });
+            } else {
+                throw new IllegalStateException("server is not available now, might have been disconnected.");
+            }
         }
     }
 
@@ -104,7 +114,7 @@ public class ServerSocketManager {
         }
     }
 
-    public void stop() {
+    public void stop() throws IllegalStateException {
         if (isServerSocketAvailable()) {
             closeServerSocketIfNeeded();
             executorService.shutdown();
@@ -113,6 +123,8 @@ public class ServerSocketManager {
             }
             connectedSocketList.clear();
             listener.onStopped();
+        } else {
+            throw new IllegalStateException("has no running server.");
         }
     }
 

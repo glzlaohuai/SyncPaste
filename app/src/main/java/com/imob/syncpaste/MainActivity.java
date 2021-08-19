@@ -108,6 +108,8 @@ public class MainActivity extends Activity implements View.OnClickListener {
     private void monitorIncoming() {
         if (serverSocket != null) {
             ServerSocketManager.getInstance().startMonitorConnectedSockets();
+        } else {
+            throw new NullPointerException("no server socket found, need to create server first");
         }
     }
 
