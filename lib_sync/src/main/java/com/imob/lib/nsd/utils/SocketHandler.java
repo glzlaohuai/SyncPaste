@@ -6,9 +6,22 @@ import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.File;
 import java.io.IOException;
+import java.io.RandomAccessFile;
 import java.net.Socket;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public class SocketHandler {
+
+    private static final String TAG = "SocketHandler";
+
+    public final static byte TYPE_FILE = 0x0;
+    public final static byte TYPE_STR = 0x1;
+
+
+    public static final int FLAG_READ_FILE_FAILED = -1;
+    public static final int FLAG_READ_FILE_FINISHED = 0;
+
 
     private Socket socket;
     private DataOutputStream dataOutputStream;
@@ -16,14 +29,23 @@ public class SocketHandler {
 
     private OnSocketMonitor onSocketMonitor;
 
-    public interface OnSocketMonitor {
-        void onIncomingData(String id, byte[] bytes);
+    private static ExecutorService executorService = Executors.newCachedThreadPool();
 
-        void onDataWrited(String id, byte[] bytes);
+
+    public interface OnSocketMonitor {
+        void onIncomingStr(String id, byte[] bytes);
+
+        void onIncomingFileBytes(String id, String fileName, long totalBytes);
+
+        void onIncomingFailed(String id);
+
+        void onDataWrited(String id);
 
         void onDataWriteFailedInvalidData();
 
         void onDataWriteFailedDisconnected(Exception exception);
+
+        void onReadMonitorFailedDueToConnectionFailed(Exception exception);
 
     }
 
@@ -38,6 +60,8 @@ public class SocketHandler {
         this.dataInputStream = new DataInputStream(socket.getInputStream());
 
         this.onSocketMonitor = onSocketMonitor;
+
+        startMonitorInput();
     }
 
     public void disconnect() {
@@ -52,13 +76,20 @@ public class SocketHandler {
         }
     }
 
-    public void write(String id, byte[] bytes) {
+
+    private void writeStringBytes(String id, byte[] bytes) {
         if (bytes != null && !TextUtils.isEmpty(id)) {
             try {
                 dataOutputStream.writeUTF(id);
+                dataOutputStream.writeByte(TYPE_STR);
+                //total len
                 dataOutputStream.writeLong(bytes.length);
+                //seg len
+                dataOutputStream.writeInt(bytes.length);
                 dataOutputStream.write(bytes);
                 dataOutputStream.flush();
+
+                onSocketMonitor.onDataWrited(id);
             } catch (IOException e) {
                 onSocketMonitor.onDataWriteFailedDisconnected(e);
             }
@@ -68,12 +99,146 @@ public class SocketHandler {
     }
 
 
+    public void writeString(String id, String content) {
+        byte[] bytes = TextUtils.isEmpty(content) ? null : content.getBytes();
+        writeStringBytes(id, bytes);
+    }
+
+
     public void writeFile(String id, File file) {
-        if (!TextUtils.isEmpty(id) && file != null && file.exists()) {
-            
+        if (!TextUtils.isEmpty(id) && file != null && file.exists() && file.isFile()) {
+
+            long availableBytes = 0;
+            boolean availableBytesKnown = false;
+            String fileName = null;
+            RandomAccessFile randomAccessFile = null;
+
+            try {
+                randomAccessFile = new RandomAccessFile(file, "r");
+                availableBytes = randomAccessFile.length();
+                fileName = file.getName();
+                availableBytesKnown = true;
+            } catch (IOException e) {
+                ExceptionHandler.print(e);
+            }
+
+            if (!availableBytesKnown) {
+                onSocketMonitor.onDataWriteFailedInvalidData();
+            } else {
+                if (availableBytes == 0) {
+                    onSocketMonitor.onDataWriteFailedInvalidData();
+                } else {
+                    // write segments
+
+                    try {
+                        dataOutputStream.writeUTF(id);
+                        dataOutputStream.writeByte(TYPE_FILE);
+                        dataOutputStream.writeLong(availableBytes);
+
+                        dataOutputStream.writeUTF(fileName);
+                    } catch (IOException e) {
+                        ExceptionHandler.print(e);
+                        onSocketMonitor.onDataWriteFailedDisconnected(e);
+
+                        return;
+                    }
+
+
+                    byte[] buffer = new byte[1024];
+                    while (true) {
+                        int readBytes = 0;
+                        try {
+                            if (!((readBytes = randomAccessFile.read(buffer)) != -1)) break;
+                        } catch (IOException e) {
+                            ExceptionHandler.print(e);
+
+                            //read failed
+                            try {
+                                dataOutputStream.writeInt(FLAG_READ_FILE_FAILED);
+                            } catch (IOException ioException) {
+                                ExceptionHandler.print(ioException);
+                                onSocketMonitor.onDataWriteFailedDisconnected(ioException);
+                                return;
+                            }
+
+                            onSocketMonitor.onDataWriteFailedInvalidData();
+                        }
+
+                        try {
+                            dataOutputStream.writeInt(readBytes);
+                            dataOutputStream.write(buffer, 0, readBytes);
+                        } catch (IOException e) {
+                            ExceptionHandler.print(e);
+
+                            onSocketMonitor.onDataWriteFailedDisconnected(e);
+                            return;
+                        }
+                    }
+
+                    try {
+                        dataOutputStream.writeInt(FLAG_READ_FILE_FINISHED);
+                        dataOutputStream.flush();
+                        onSocketMonitor.onDataWrited(id);
+                    } catch (IOException e) {
+                        ExceptionHandler.print(e);
+                        onSocketMonitor.onDataWriteFailedDisconnected(e);
+                    }
+                }
+            }
         } else {
             onSocketMonitor.onDataWriteFailedInvalidData();
         }
     }
+
+
+    private void startMonitorInput() {
+        executorService.execute(new Runnable() {
+            @Override
+            public void run() {
+                while (true) {
+                    try {
+                        String id = dataInputStream.readUTF();
+                        byte type = dataInputStream.readByte();
+                        long availableBytes = dataInputStream.readLong();
+
+                        if (type == TYPE_STR) {
+                            int segLen = dataInputStream.readInt();
+
+                            byte[] bytes = new byte[segLen];
+                            dataInputStream.read(bytes, 0, segLen);
+
+                            onSocketMonitor.onIncomingStr(id, bytes);
+
+                        } else {
+                            String fileName = dataInputStream.readUTF();
+
+                            int segLen;
+
+                            while (true) {
+                                segLen = dataInputStream.readInt();
+
+                                //peer write file failed due to file read failed
+                                if (segLen == FLAG_READ_FILE_FAILED) {
+                                    onSocketMonitor.onIncomingFailed(id);
+                                    break;
+                                } else if (segLen == FLAG_READ_FILE_FINISHED) {
+                                    onSocketMonitor.onIncomingFileBytes(id, fileName, availableBytes);
+                                    break;
+                                } else {
+                                    byte[] segBytes = new byte[segLen];
+                                    dataInputStream.read(segBytes, 0, segBytes.length);
+                                }
+                            }
+                        }
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                        onSocketMonitor.onReadMonitorFailedDueToConnectionFailed(e);
+                        break;
+                    }
+                }
+            }
+        });
+    }
+
 
 }
