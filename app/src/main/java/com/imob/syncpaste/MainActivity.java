@@ -2,16 +2,21 @@ package com.imob.syncpaste;
 
 import android.app.Activity;
 import android.content.DialogInterface;
+import android.content.res.AssetManager;
 import android.os.Bundle;
 import android.os.StrictMode;
 import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 
+import com.imob.lib.nsd.utils.Closer;
 import com.imob.lib.nsd.utils.ServerSocketManager;
 import com.imob.lib.nsd.utils.SocketHandler;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.ArrayList;
@@ -34,6 +39,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
 
     private ExecutorService executorService = Executors.newCachedThreadPool();
 
+    private File file;
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
@@ -47,11 +53,50 @@ public class MainActivity extends Activity implements View.OnClickListener {
         findViewById(R.id.log_server_info).setOnClickListener(this);
         findViewById(R.id.write_to_server).setOnClickListener(this);
         findViewById(R.id.write_to_clients).setOnClickListener(this);
+        findViewById(R.id.write_to_clients_file).setOnClickListener(this);
+        findViewById(R.id.write_to_server_file).setOnClickListener(this);
 
         StrictMode.setThreadPolicy(new StrictMode.ThreadPolicy.Builder()
                 .detectAll()
                 .penaltyLog()
                 .build());
+
+        writeTestAssetFileToLocal();
+
+    }
+
+    private void writeTestAssetFileToLocal() {
+        file = new File(getCacheDir(), "abc_test.apk");
+        if (!file.exists()) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    AssetManager assetManager = getAssets();
+                    try {
+                        InputStream open = assetManager.open("ks_demo-debug.apk");
+                        if (file.exists()) {
+                            return;
+                        }
+                        file.createNewFile();
+                        FileOutputStream fileOutputStream = new FileOutputStream(file);
+
+                        byte[] bytes = new byte[1024];
+                        int readed = -1;
+                        while ((readed = open.read(bytes)) != -1) {
+                            fileOutputStream.write(bytes, 0, readed);
+                        }
+                        fileOutputStream.flush();
+
+                        Closer.close(open);
+                        Closer.close(fileOutputStream);
+
+                    } catch (IOException e) {
+                        e.printStackTrace();
+                    }
+                }
+            }).start();
+
+        }
     }
 
     @Override
@@ -81,9 +126,42 @@ public class MainActivity extends Activity implements View.OnClickListener {
             case R.id.write_to_clients:
                 writeToClients();
                 break;
+
+            case R.id.write_to_clients_file:
+                writeFileToClients();
+                break;
+
+            case R.id.write_to_server_file:
+                writeFileToServer();
+                break;
         }
     }
 
+
+    private void writeFileToServer() {
+        if (clientSocketHandler != null) {
+            executorService.execute(new Runnable() {
+                @Override
+                public void run() {
+                    clientSocketHandler.writeFile("to_server_id_", file);
+                }
+            });
+        }
+    }
+
+
+    private void writeFileToClients() {
+        if (connectedClientsList != null && connectedClientsList.size() > 0) {
+            executorService.execute(new Runnable() {
+                @Override
+                public void run() {
+                    for (SocketHandler socketHandler : connectedClientsList) {
+                        socketHandler.writeFile("to_connected_id_", file);
+                    }
+                }
+            });
+        }
+    }
 
     private void writeToServer() {
 
@@ -141,6 +219,7 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         try {
                             Log.i(TAG, "run: connect to :" + ip + ", " + port);
                             Socket socket = new Socket(ip, Integer.parseInt(port));
+                            Log.i(TAG, "run: connected.");
                             clientSocketHandler = new SocketHandler(socket, new SocketHandler.OnSocketMonitor() {
                                 @Override
                                 public void onIncomingStr(String id, byte[] bytes) {

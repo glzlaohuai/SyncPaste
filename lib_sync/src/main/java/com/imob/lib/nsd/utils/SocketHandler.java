@@ -1,6 +1,7 @@
 package com.imob.lib.nsd.utils;
 
 import android.text.TextUtils;
+import android.util.Log;
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
@@ -146,7 +147,7 @@ public class SocketHandler {
                     }
 
 
-                    byte[] buffer = new byte[1024];
+                    byte[] buffer = new byte[1024 * 10];
                     while (true) {
                         int readBytes = 0;
                         try {
@@ -167,6 +168,7 @@ public class SocketHandler {
                         }
 
                         try {
+                            Log.i(TAG, "writeFile chunk:  " + readBytes);
                             dataOutputStream.writeInt(readBytes);
                             dataOutputStream.write(buffer, 0, readBytes);
                         } catch (IOException e) {
@@ -218,6 +220,7 @@ public class SocketHandler {
 
                             while (true) {
                                 segLen = dataInputStream.readInt();
+                                Log.i(TAG, "file seg len: " + segLen);
 
                                 //peer write file failed due to file read failed
                                 if (segLen == FLAG_READ_FILE_FAILED) {
