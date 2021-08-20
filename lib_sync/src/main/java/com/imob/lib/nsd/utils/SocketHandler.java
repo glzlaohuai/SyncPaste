@@ -35,9 +35,11 @@ public class SocketHandler {
     public interface OnSocketMonitor {
         void onIncomingStr(String id, byte[] bytes);
 
-        void onIncomingFileBytes(String id, String fileName, long totalBytes);
+        void onIncomingFileReadFinished(String id, String fileName, long totalBytes);
 
-        void onIncomingFailed(String id);
+        void onIncomingFileReadChunk(String id, String fileName, byte[] segBytes, long totalBytes);
+
+        void onIncomingFileEncouterPeerWriteFailedFlag(String id);
 
         void onDataWrited(String id);
 
@@ -219,14 +221,15 @@ public class SocketHandler {
 
                                 //peer write file failed due to file read failed
                                 if (segLen == FLAG_READ_FILE_FAILED) {
-                                    onSocketMonitor.onIncomingFailed(id);
+                                    onSocketMonitor.onIncomingFileEncouterPeerWriteFailedFlag(id);
                                     break;
                                 } else if (segLen == FLAG_READ_FILE_FINISHED) {
-                                    onSocketMonitor.onIncomingFileBytes(id, fileName, availableBytes);
+                                    onSocketMonitor.onIncomingFileReadFinished(id, fileName, availableBytes);
                                     break;
                                 } else {
                                     byte[] segBytes = new byte[segLen];
                                     dataInputStream.read(segBytes, 0, segBytes.length);
+                                    onSocketMonitor.onIncomingFileReadChunk(id, fileName, segBytes, availableBytes);
                                 }
                             }
                         }

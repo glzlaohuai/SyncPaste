@@ -148,13 +148,18 @@ public class MainActivity extends Activity implements View.OnClickListener {
                                 }
 
                                 @Override
-                                public void onIncomingFileBytes(String id, String fileName, long totalBytes) {
-                                    Log.i(TAG, "onIncomingFileBytes: " + id + ", " + fileName + ", " + totalBytes);
+                                public void onIncomingFileReadFinished(String id, String fileName, long totalBytes) {
+                                    Log.i(TAG, "onIncomingFileReadFinished: " + id + ", " + fileName + ", " + totalBytes);
                                 }
 
                                 @Override
-                                public void onIncomingFailed(String id) {
-                                    Log.i(TAG, "onIncomingFailed: ");
+                                public void onIncomingFileReadChunk(String id, String fileName, byte[] segBytes, long totalBytes) {
+                                    Log.i(TAG, "onIncomingFileReadChunk: " + id + ", " + fileName + ", chunk: " + segBytes.length + ", " + totalBytes);
+                                }
+
+                                @Override
+                                public void onIncomingFileEncouterPeerWriteFailedFlag(String id) {
+                                    Log.i(TAG, "onIncomingFileEncouterPeerWriteFailedFlag: ");
                                 }
 
                                 @Override
@@ -238,13 +243,18 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         }
 
                         @Override
-                        public void onIncomingFileBytes(String id, String fileName, long totalBytes) {
-                            Log.i(TAG, "onIncomingFileBytes: ");
+                        public void onIncomingFileReadFinished(String id, String fileName, long totalBytes) {
+                            Log.i(TAG, "onIncomingFileReadFinished: ");
                         }
 
                         @Override
-                        public void onIncomingFailed(String id) {
-                            Log.i(TAG, "onIncomingFailed: ");
+                        public void onIncomingFileReadChunk(String id, String fileName, byte[] segBytes, long totalBytes) {
+                            Log.i(TAG, "onIncomingFileReadChunk: " + id + ", " + fileName + ", chunk: " + segBytes.length + ", total: " + totalBytes);
+                        }
+
+                        @Override
+                        public void onIncomingFileEncouterPeerWriteFailedFlag(String id) {
+                            Log.i(TAG, "onIncomingFileEncouterPeerWriteFailedFlag: ");
                         }
 
                         @Override
