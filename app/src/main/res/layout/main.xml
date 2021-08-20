@@ -31,10 +31,24 @@
         android:text="connect to server" />
 
     <Button
-        android:id="@+id/check_client"
+        android:id="@+id/log_server_info"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:text="check client connections" />
+        android:text="log server info" />
+
+
+    <Button
+        android:id="@+id/write_to_server"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="write to server" />
+
+
+    <Button
+        android:id="@+id/write_to_clients"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="write to clients" />
 
 
 </LinearLayout>

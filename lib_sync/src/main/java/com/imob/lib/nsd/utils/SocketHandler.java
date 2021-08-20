@@ -231,7 +231,7 @@ public class SocketHandler {
                             }
                         }
                     } catch (IOException e) {
-                        e.printStackTrace();
+                        ExceptionHandler.print(e);
                         onSocketMonitor.onReadMonitorFailedDueToConnectionFailed(e);
                         break;
                     }
