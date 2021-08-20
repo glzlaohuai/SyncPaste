@@ -248,6 +248,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
                                 }
 
                                 @Override
+                                public void onFileWrited(String id, File file) {
+                                    Log.i(TAG, "onFileWrited: " + id + ", " + file);
+                                }
+
+                                @Override
                                 public void onDataWriteFailedInvalidData() {
                                     Log.i(TAG, "onDataWriteFailedInvalidData: ");
                                 }
@@ -339,6 +344,11 @@ public class MainActivity extends Activity implements View.OnClickListener {
                         @Override
                         public void onDataWrited(String id) {
                             Log.i(TAG, "onDataWrited: ");
+                        }
+
+                        @Override
+                        public void onFileWrited(String id, File file) {
+                            Log.i(TAG, "onFileWrited: " + id + ", " + file);
                         }
 
                         @Override

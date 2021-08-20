@@ -23,14 +23,15 @@ public class SocketHandler {
     public static final int FLAG_READ_FILE_FAILED = -1;
     public static final int FLAG_READ_FILE_FINISHED = 0;
 
+    private static ExecutorService writeExecutorService = Executors.newSingleThreadExecutor();
+    private static ExecutorService monitorReadExecutorService = Executors.newCachedThreadPool();
+
 
     private Socket socket;
     private DataOutputStream dataOutputStream;
     private DataInputStream dataInputStream;
 
     private OnSocketMonitor onSocketMonitor;
-
-    private static ExecutorService executorService = Executors.newCachedThreadPool();
 
 
     public interface OnSocketMonitor {
@@ -43,6 +44,8 @@ public class SocketHandler {
         void onIncomingFileEncouterPeerWriteFailedFlag(String id);
 
         void onDataWrited(String id);
+
+        void onFileWrited(String id, File file);
 
         void onDataWriteFailedInvalidData();
 
@@ -101,14 +104,22 @@ public class SocketHandler {
         }
     }
 
-
     public void writeString(String id, String content) {
-        byte[] bytes = TextUtils.isEmpty(content) ? null : content.getBytes();
-        writeStringBytes(id, bytes);
+        doWriteString(id, content);
+    }
+
+    private void doWriteString(String id, String content) {
+        writeExecutorService.execute(new Runnable() {
+            @Override
+            public void run() {
+                byte[] bytes = TextUtils.isEmpty(content) ? null : content.getBytes();
+                writeStringBytes(id, bytes);
+            }
+        });
     }
 
 
-    public void writeFile(String id, File file) {
+    private void doWriteFile(String id, File file) {
         if (!TextUtils.isEmpty(id) && file != null && file.exists() && file.isFile()) {
 
             long availableBytes = 0;
@@ -148,7 +159,9 @@ public class SocketHandler {
 
 
                     byte[] buffer = new byte[1024 * 10];
+                    int step = 0;
                     while (true) {
+                        step++;
                         int readBytes = 0;
                         try {
                             if (!((readBytes = randomAccessFile.read(buffer)) != -1)) break;
@@ -168,9 +181,10 @@ public class SocketHandler {
                         }
 
                         try {
-                            Log.i(TAG, "writeFile chunk:  " + readBytes);
                             dataOutputStream.writeInt(readBytes);
                             dataOutputStream.write(buffer, 0, readBytes);
+
+                            Log.i(TAG, "writeFile: step: " + step + ", bytes: " + readBytes);
                         } catch (IOException e) {
                             ExceptionHandler.print(e);
 
@@ -182,7 +196,7 @@ public class SocketHandler {
                     try {
                         dataOutputStream.writeInt(FLAG_READ_FILE_FINISHED);
                         dataOutputStream.flush();
-                        onSocketMonitor.onDataWrited(id);
+                        onSocketMonitor.onFileWrited(id, file);
                     } catch (IOException e) {
                         ExceptionHandler.print(e);
                         onSocketMonitor.onDataWriteFailedDisconnected(e);
@@ -192,11 +206,21 @@ public class SocketHandler {
         } else {
             onSocketMonitor.onDataWriteFailedInvalidData();
         }
+
+    }
+
+    public void writeFile(String id, File file) {
+        writeExecutorService.execute(new Runnable() {
+            @Override
+            public void run() {
+                doWriteFile(id, file);
+            }
+        });
     }
 
 
     private void startMonitorInput() {
-        executorService.execute(new Runnable() {
+        monitorReadExecutorService.execute(new Runnable() {
             @Override
             public void run() {
                 while (true) {
@@ -204,6 +228,8 @@ public class SocketHandler {
                         String id = dataInputStream.readUTF();
                         byte type = dataInputStream.readByte();
                         long availableBytes = dataInputStream.readLong();
+
+                        Log.i(TAG, "read, id: " + id + ", type: " + type + ", bytes: " + availableBytes);
 
                         if (type == TYPE_STR) {
                             int segLen = dataInputStream.readInt();
@@ -215,6 +241,7 @@ public class SocketHandler {
 
                         } else {
                             String fileName = dataInputStream.readUTF();
+                            Log.i(TAG, "read, fileName: " + fileName);
 
                             int segLen;
 
@@ -231,7 +258,7 @@ public class SocketHandler {
                                     break;
                                 } else {
                                     byte[] segBytes = new byte[segLen];
-                                    dataInputStream.read(segBytes, 0, segBytes.length);
+                                    dataInputStream.readFully(segBytes, 0, segBytes.length);
                                     onSocketMonitor.onIncomingFileReadChunk(id, fileName, segBytes, availableBytes);
                                 }
                             }
