@@ -1,4 +1,4 @@
-package com.imob.lib.nsd.utils;
+package com.imob.lib.socket.utils;
 
 import java.io.Closeable;
 import java.io.IOException;
